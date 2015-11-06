@@ -32,8 +32,9 @@ static char *readNXDL(FILE *in)
 	struct stat stat;
 
 	fstat(fileno(in), &stat);
-	nxdlData = malloc(stat.st_size*sizeof(char));
+	nxdlData = malloc((stat.st_size+1)*sizeof(char));
 	if(nxdlData != NULL){
+		memset(nxdlData,0,(stat.st_size+1)*sizeof(char));
 		fread(nxdlData,stat.st_size,1,in);
 	}
 	return nxdlData;
@@ -45,7 +46,6 @@ static char *NXVdefaultRetriever(char *appDef, void *userData)
 	char *nxdlPath = NULL, *nxdlData = NULL;
 	int len;
 	FILE *in = NULL;
-
   len = strlen(appDef) + strlen(nxdlRootPath) + 50;
 	nxdlPath = malloc(len*sizeof(char));
 	if(nxdlPath == NULL){
@@ -118,10 +118,6 @@ pNXVcontext NXVinit(char *nxdlDir)
 	self->logger = NXVdefaultLogger;
 	self->nxdlRetriever = NXVdefaultRetriever;
 	self->retrieverUserData = nxdlDir;
-	self->warnOptional = 1;
-	self->warnBase = 1;
-	self->warnUndefined = 1;
-	self->debug = 1;
 	hash_construct_table(&self->logData,50);
 	return self;
 }
@@ -134,26 +130,11 @@ void NXVkill(pNXVcontext self)
 		if(self->dataFile){
 			free(self->dataFile);
 		}
-		if(self->dataPath){
-			free(self->dataPath);
-		}
 		if(self->nxdlFile){
 			free(self->nxdlFile);
 		}
-		if(self->nxdlPath){
-			free(self->nxdlPath);
-		}
 		hash_free_table(&self->logData,free);
 		free(self);
-}
-/*----------------------------------------------------------------*/
-void NXDVsetOutputFlags(pNXVcontext self, int warnOptional,
-												 int warnBase, int warnUndefined )
-{
-	assert(self != NULL);
-	self->warnOptional = warnOptional;
-	self->warnBase = warnBase;
-	self->warnUndefined = warnUndefined;
 }
 /*----------------------------------------------------------------*/
 void NXVsetNXDLRetriever(pNXVcontext self, RetrieveNXDL retriever,

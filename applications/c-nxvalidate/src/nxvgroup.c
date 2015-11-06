@@ -152,40 +152,41 @@ We need two passes:
 I keep the names already seen in the first pass in a
 hash table
 
-TODO: may be refactor this into processgroup, processfield?
-This becomes to big for a function...... This is to tightly
-coupled by data. Think first how to untangle this. Data is:
-  * namesSeen
-	* childPath
-	* myPath
------------------------------------------------------------------*/
+----------------------------------------------------------------*/
 int NXVvalidateGroup(pNXVcontext self, hid_t groupID,
 	xmlNodePtr groupNode)
 {
 		hash_table namesSeen;
 		xmlNodePtr cur = NULL;
 		xmlChar *name = NULL;
-		char childPath[512] ,childName[132], nxdlChildPath[512],
-			groupPath[512];
 		hid_t childID;
-		char fName[256];
-		char *myPath;
-		char *myGroup;
-
+		char fName[256], childName[512], nxdlChildPath[512], childPath[512];
+		char mynxdlPath[512];
+		char *savedNXDLPath;
+		/*
+			manage nxdlPath, xmlGetNodePath does not work
+		*/
+		savedNXDLPath = self->nxdlPath;
 		name = xmlGetProp(groupNode,(xmlChar *)"type");
-		snprintf(groupPath,sizeof(groupPath),"%s/%s",
-			self->nxdlPath,(char *)name);
+		if(self->nxdlPath == NULL) {
+			snprintf(mynxdlPath,sizeof(mynxdlPath),"/%s", (char *) name);
+		} else {
+			snprintf(mynxdlPath,sizeof(mynxdlPath),"%s/%s",
+				self->nxdlPath, (char *) name);
+		}
 		xmlFree(name);
-		myGroup = self->nxdlPath;
-		self->nxdlPath = groupPath;
+		self->nxdlPath = mynxdlPath;
 
+		/*
+			tell what we are doing
+		*/
 		H5Iget_name(groupID,fName,sizeof(fName));
 		NXVsetLog(self,"sev","debug");
 		NXVsetLog(self,"message","Validating group");
 		NXVsetLog(self,"nxdlPath",self->nxdlPath);
 		NXVsetLog(self,"dataPath",fName);
 		NXVlog(self);
-		myPath = self->dataPath;
+
 
 		validateGroupAttributes(self, groupID, groupNode);
 		hash_construct_table(&namesSeen,100);
@@ -197,22 +198,24 @@ int NXVvalidateGroup(pNXVcontext self, hid_t groupID,
 					childID = findGroup(self, groupID, cur);
 					if(childID >= 0){
 							H5Iget_name(childID, childName,sizeof(childName));
-							snprintf(childPath,sizeof(childPath),"%s/%s",
-								fName,childName);
 							hash_insert(childName,strdup(""),&namesSeen);
 							NXVvalidateGroup(self,childID,cur);
 					} else {
+						name = xmlGetProp(cur,(xmlChar *)"type");
+						snprintf(nxdlChildPath,sizeof(nxdlChildPath),"%s/%s",
+							self->nxdlPath, (char *)name);
+						xmlFree(name);
+						NXVsetLog(self,"dataPath",fName);
+						NXVsetLog(self,"nxdlPath", nxdlChildPath);
 						if(!isOptional(cur)){
-							name = xmlGetProp(cur,(xmlChar *)"type");
-							snprintf(nxdlChildPath,sizeof(nxdlChildPath),"%s/%s",
-								self->nxdlPath, (char *)name);
-							xmlFree(name);
 							NXVsetLog(self,"sev","error");
-							NXVsetLog(self,"dataPath",fName);
-							NXVsetLog(self,"nxdlPath", nxdlChildPath);
 							NXVsetLog(self,"message","Required group missing");
 							NXVlog(self);
 							self->errCount++;
+						} else {
+							NXVsetLog(self,"sev","warnopt");
+							NXVsetLog(self,"message","Optional group missing");
+							NXVlog(self);
 						}
 					}
 			}
@@ -226,21 +229,29 @@ int NXVvalidateGroup(pNXVcontext self, hid_t groupID,
 					snprintf(childPath,sizeof(childPath),"%s/%s",
 						fName,name);
 					if(childID < 0){
+						NXVsetLog(self,"dataPath",childPath);
+						snprintf(nxdlChildPath,sizeof(nxdlChildPath),
+							"%s/%s", self->nxdlPath, name);
+						NXVsetLog(self,"nxdlPath", nxdlChildPath);
 						if(!isOptional(cur)){
 									NXVsetLog(self,"sev","error");
-									NXVsetLog(self,"dataPath",childPath);
-									snprintf(nxdlChildPath,sizeof(nxdlChildPath),
-										"%s/%s", self->nxdlPath, name);
-									NXVsetLog(self,"nxdlPath", nxdlChildPath);
 									NXVsetLog(self,"message","Required field missing");
 									NXVlog(self);
 									self->errCount++;
+						} else {
+							NXVsetLog(self,"sev","warnopt");
+							NXVsetLog(self,"message","Optional field missing");
+							NXVlog(self);
 						}
 					} else {
 						if(xmlStrcmp(name,(xmlChar *)"depends_on") == 0){
+							/*
+								This must b validated from the field level. As
+								it might point to fields which are not in the
+								application definition
+							*/
 							validateDependsOn(self,groupID,childID);
 						} else {
-							self->dataPath = childPath;
 							NXVvalidateField(self,childID, cur);
 						}
 						hash_insert((char *)name,strdup(""),&namesSeen);
@@ -260,7 +271,9 @@ int NXVvalidateGroup(pNXVcontext self, hid_t groupID,
 			anyway only. Defer for the time being...
 		*/
 		hash_free_table(&namesSeen,free);
-		self->dataPath = myPath;
-		self->nxdlPath = myGroup;
+		/*
+			restore my paths...
+		*/
+		self->nxdlPath = savedNXDLPath;
 		return 0;
 	}

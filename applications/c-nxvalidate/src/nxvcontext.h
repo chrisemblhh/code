@@ -15,16 +15,11 @@
 typedef struct __NXVContext {
 		char *dataFile;
 		char *nxdlFile;
-		char *dataPath;
 		char *nxdlPath;
 		validateLogger logger;
 		void *loggerUserData;
 		RetrieveNXDL   nxdlRetriever;
 		void *retrieverUserData;
-		unsigned int warnOptional;
-		unsigned int warnBase;
-		unsigned int warnUndefined;
-		unsigned int debug;
 		hash_table logData;
 		hid_t fileID;
 		int subEntryFound;

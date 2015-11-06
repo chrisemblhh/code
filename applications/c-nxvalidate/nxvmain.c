@@ -67,7 +67,6 @@ int main(int argc, char *argv[])
 		fprintf(stdout,"ERROR: failed to allocate validation context\n");
 		exit(1);
 	}
-	NXDVsetOutputFlags(nxvContext, warnOpt, warnBase, warnUndefined);
   status =  NXVvalidate(nxvContext, argv[optind], appDef, NULL);
 	NXVkill(nxvContext);
 	return(status);

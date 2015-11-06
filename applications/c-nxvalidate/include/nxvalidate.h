@@ -63,18 +63,6 @@ typedef char* (*RetrieveNXDL)(char *appDef, void *userData);
  */
 void NXVsetNXDLRetriever(pNXVcontext self, RetrieveNXDL retriever,
 												 void *userData);
-/*
-	* NXDVsetOutputFlags sets output control flags.
-	* \param self The validation context to set output flags for
-	* \param warnOptional 1 when warning about missing optional
-	* fields shall be printed
-	* \param warnBase 1 when when warnings about additional fields which
-	* are base class compliant should be printed.
-	* \param warnUndefined 1 when warnings about undefined additional fields
-	* are to be printed.
-	*/
-void NXDVsetOutputFlags(pNXVcontext self, int warnOptional,
-												 int warnBase, int warnUndefined );
 
 /* NXVvalidate runs the validation. Outputs trouble to a log.
 * \param self The validation context to run the validation in

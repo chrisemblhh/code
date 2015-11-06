@@ -12,19 +12,233 @@
 #include <libxml/parser.h>
 #include <string.h>
 
+/*----------------------------------------------------*/
+static xmlChar *findGroupName(xmlNodePtr group)
+{
+	xmlChar *name;
+	xmlNodePtr cur;
+
+	name = xmlGetProp(group,(xmlChar *)"name");
+	if(name != NULL){
+		return name;
+	}
+
+	cur = group->xmlChildrenNode;
+	while(cur != NULL){
+		if(xmlStrcmp(cur->name,(xmlChar *)"attribute") == 0){
+			name = xmlGetProp(cur,(xmlChar *)"name");
+			if(name != NULL){
+				return name;
+			}
+			xmlFree(name);
+		}
+		cur = cur->next;
+	}
+	return NULL;
+}
+/*----------------------------------------------------*/
+static xmlNodePtr xmlFindGroup(xmlNodePtr root,
+	xmlChar *type, xmlChar *name)
+{
+	xmlNodePtr cur;
+	xmlChar *myType, *myName;
+
+	cur = root->xmlChildrenNode;
+	while(cur != NULL){
+			if(xmlStrcmp(cur->name,(xmlChar *)"group") == 0){
+				myType = xmlGetProp(cur,(xmlChar *)"type");
+				if(xmlStrcmp(myType,type) == 0){
+					if(name != NULL){
+							myName = findGroupName(cur);
+							if(xmlStrcmp(name,myName) == 0){
+								xmlFree(myName);
+								xmlFree(myType);
+								return cur;
+							}
+					} else {
+						xmlFree(myType);
+						return cur;
+					}
+				}
+		}
+			cur = cur->next;
+	}
+	return NULL;
+}
+/*----------------------------------------------------*/
+static xmlNodePtr findField(xmlNodePtr root, xmlChar *name)
+{
+	xmlNodePtr cur;
+	xmlChar *myName;
+
+	cur = root->xmlChildrenNode;
+	while(cur != NULL){
+		if(xmlStrcmp(cur->name,(xmlChar *)"field") == 0){
+					myName = xmlGetProp(cur,(xmlChar*)"name");
+					if(xmlStrcmp(myName,name) == 0){
+						xmlFree(myName);
+						return cur;
+					}
+					xmlFree(myName);
+		}
+		cur = cur->next;
+	}
+	return NULL;
+}
+/*----------------------------------------------------*/
+static xmlNodePtr findLink(xmlNodePtr root, xmlChar *name)
+{
+	xmlNodePtr cur;
+	xmlChar *myName;
+
+	cur = root->xmlChildrenNode;
+	while(cur != NULL){
+		if(xmlStrcmp(cur->name,(xmlChar *)"link") == 0){
+					myName = xmlGetProp(cur,(xmlChar*)"name");
+					if(xmlStrcmp(myName,name) == 0){
+						xmlFree(myName);
+						return cur;
+					}
+					xmlFree(myName);
+		}
+		cur = cur->next;
+	}
+	return NULL;
+}
+/*----------------------------------------------------*/
+static void mergeGroups(xmlNodePtr root, xmlNodePtr base)
+{
+	xmlNodePtr cur, rootCur;
+	xmlChar *type, *name;
+
+
+	cur = base->xmlChildrenNode;
+	while(cur != NULL){
+		if(xmlStrcmp(cur->name,(xmlChar *)"group") == 0){
+				type = xmlGetProp(cur,(xmlChar *)"type");
+				name = findGroupName(cur);
+				rootCur = xmlFindGroup(root, type, name);
+				if(rootCur != NULL){
+					mergeGroups(rootCur,cur);
+				} else {
+					xmlAddChild(root,xmlCopyNode(cur,1));
+				}
+				xmlFree(type);
+				xmlFree(name);
+		}
+		if(xmlStrcmp(cur->name,(xmlChar *)"field") == 0){
+			name = xmlGetProp(cur,(xmlChar *)"name");
+			rootCur = findField(root,name);
+			if(rootCur == NULL){
+				xmlAddChild(root,xmlCopyNode(cur,1));
+			}
+			xmlFree(name);
+		}
+		if(xmlStrcmp(cur->name,(xmlChar *)"link") == 0){
+			name = xmlGetProp(cur,(xmlChar *)"name");
+			rootCur = findLink(root,name);
+			if(rootCur == NULL){
+				xmlAddChild(root,xmlCopyNode(cur,1));
+			}
+			xmlFree(name);
+		}
+		cur = cur->next;
+	}
+}
+/*----------------------------------------------------*/
+static void mergeDefinitions(pNXVcontext self,
+		xmlNodePtr root, xmlNodePtr base )
+{
+	xmlChar *attr = NULL;
+
+	if(xmlStrcmp(base->name,(xmlChar *)"definition") !=0 ){
+		NXVsetLog(self,"sev","error");
+		NXVsetLog(self,"message",
+			"No definition element in parent application definition, INVALID");
+		NXVlog(self);
+		self->errCount++;
+		xmlSetProp(root,
+			(xmlChar *)"extends",(xmlChar *)"NXobject");
+		return;
+	}
+
+	/*
+	copy extends attribute from base to root in order
+	to stop recursion in mergeInheritance
+	*/
+  attr = xmlGetProp(base,(xmlChar *)"extends");
+	xmlSetProp(root,(xmlChar *)"extends",attr);
+
+	mergeGroups(root,base);
+
+}
+/*---------------------------------------------------*/
 static void mergeInheritance(pNXVcontext self)
 {
-	/* TODO
-   - check the extends attribute of definition
-	 - If not NXobject:
-	   * load the base application definition
-		 * merge the base application defintition into
-		   the tree.
-	OR: Discuss if we want this. I have a Tcl script which does
-	that. So, there is the option to use inheritance only internally
-	and have deployed application definitions which are complete.
-	This saves on complexity here. And may be even the users.
-	*/
+	xmlNodePtr root = xmlDocGetRootElement(self->nxdlDoc);
+	xmlNodePtr cur;
+	xmlChar *attr = NULL;
+	char fullNXDLName[256];
+	char *baseClassData = NULL;
+	xmlDocPtr baseNxdl = NULL;
+	xmlNodePtr base = NULL;
+
+	if(xmlStrcmp(root->name,(xmlChar *)"definition" ) != 0){
+		NXVsetLog(self,"sev","fatal");
+		NXVsetLog(self,"message",
+			"No definition element in application definition, INVALID");
+		NXVlog(self);
+		self->errCount++;
+		return;
+	}
+
+	attr = xmlGetProp(root,(xmlChar *)"extends");
+	if(attr == NULL){
+		NXVsetLog(self,"sev","error");
+		NXVsetLog(self,"message",
+			"definition element has no extends attribute, MALFORMED");
+		NXVlog(self);
+		self->errCount++;
+		return;
+	}
+
+	if(xmlStrcmp(attr,(xmlChar *)"NXobject") == 0) {
+		/* nothing to do */
+		return;
+	}
+
+  NXVsetLog(self,"sev","debug");
+	NXVprintLog(self,"message","Loading parent definition %s",
+		(char *)attr);
+	NXVlog(self);
+
+	snprintf(fullNXDLName, sizeof(fullNXDLName),"%s.nxdl.xml",
+		(char *)attr);
+	baseClassData = self->nxdlRetriever(fullNXDLName,self->retrieverUserData);
+	if(baseClassData == NULL){
+		NXVsetLog(self,"sev","error");
+		NXVsetLog(self,"message","Failed to load parent application definition");
+		NXVlog(self);
+		self->errCount++;
+		return;
+	}
+	baseNxdl = xmlParseDoc((xmlChar *)baseClassData);
+	base= xmlDocGetRootElement(baseNxdl);
+	if(base == NULL){
+		xmlFreeDoc(baseNxdl);
+		NXVsetLog(self,"sev","error");
+		NXVsetLog(self,"message","Failed to parse parent application definition");
+		NXVlog(self);
+		self->errCount++;
+		return;
+	}
+
+	mergeDefinitions(self,root,base);
+	xmlFreeDoc(baseNxdl);
+	free(baseClassData);
+
+	mergeInheritance(self);
+
 }
 /*--------------------------------------------------------------*/
 int NXVloadAppDef(pNXVcontext self, char *nxdlFile)
@@ -67,6 +281,11 @@ int NXVloadAppDef(pNXVcontext self, char *nxdlFile)
 
   mergeInheritance(self);
 
+  /*
+		This is for debugging the inheritance merging
+		comment out in production
+		*/
+	xmlSaveFormatFile("debugxml.xml",self->nxdlDoc,1);
 	return 0;
 }
 /*----------------------------------------------------------------*/

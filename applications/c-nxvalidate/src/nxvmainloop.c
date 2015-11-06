@@ -24,11 +24,21 @@ static int validateFileAttributes(pNXVcontext self, hid_t fileID)
 	return 0;
 }
 /*--------------------------------------------------------------*/
-static int validatePath(pNXVcontext self, char *path, char *nxdlFile)
+static int validatePath(pNXVcontext self, char *path, char *rawNxdlFile)
 {
 	int status;
 	hid_t groupID;
 	xmlNodePtr groupNode = NULL;
+	char nxdlFile[512];
+
+	/*
+		first fix the appDef: the nxdl.xml postfix may be missing
+	*/
+	if(strstr(rawNxdlFile,"nxdl.xml") != NULL){
+		strncpy(nxdlFile,rawNxdlFile,sizeof(nxdlFile));
+	} else {
+		snprintf(nxdlFile,sizeof(nxdlFile),"%s.nxdl.xml", rawNxdlFile);
+	}
 
 	/* report what is being done */
 	NXVsetLog(self,"dataPath", path);
@@ -45,13 +55,13 @@ static int validatePath(pNXVcontext self, char *path, char *nxdlFile)
 	}
 
 	groupID = H5Gopen(self->fileID, path,H5P_DEFAULT);
-	assert(groupID >= 0); /* we searched for it. THis cannot be */
+	assert(groupID >= 0); /* we searched for it. This cannot be */
 	groupNode = NXVfindEntry(self);
 	if(groupNode == NULL){
 		return 1;
 	}
 
-	self->nxdlPath = strdup("");
+	self->nxdlPath = NULL;
 	status = NXVvalidateGroup(self, groupID, groupNode);
 	return status;
 }
@@ -77,14 +87,13 @@ static herr_t NXVentryIterator(hid_t g_id,
 			defID = H5LTread_dataset_string (subID,
 				 "definition", definition );
 			if(defID > 0){
-				snprintf(nxPath,sizeof(nxPath),"%s/%s", self->dataPath, name);
+				H5Iget_name(g_id,nxPath,sizeof(nxPath));
 				validatePath(self,nxPath,definition);
 				self->subEntryFound = 1;
 			}
 			H5Gclose(subID);
 		}
 	}
-
 	return 0;
 }
 /*---------------------------------------------------------------*/
@@ -157,10 +166,6 @@ static herr_t NXVrootIterator(hid_t g_id,
 					or we have NXsubentry
 				*/
 				self->subEntryFound = 0;
-				if(self->dataPath != NULL){
-					free(self->dataPath);
-				}
-				self->dataPath = strdup(nxPath);
 				H5Literate(entryID, H5_INDEX_NAME, H5_ITER_INC, &idx,
 					NXVentryIterator, self);
 				if(self->subEntryFound == 0){
