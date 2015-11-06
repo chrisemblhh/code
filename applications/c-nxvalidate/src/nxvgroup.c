@@ -5,6 +5,7 @@
 	*
 	* Mark Koennecke, mark.koennecke@psi.ch, and NIAC
 	*/
+#include <assert.h>
 #include <nxvalidate.h>
 #include "nxvcontext.h"
 #include <string.h>
@@ -15,7 +16,57 @@
 static void validateGroupAttributes(pNXVcontext self,
 	hid_t groupID, xmlNodePtr groupNode)
 {
-	/* TODO */
+	xmlNodePtr cur;
+	xmlChar *type, *name;
+	herr_t attID;
+	char data[512], gname[512];
+
+	memset(data,0,sizeof(data));
+	memset(gname,0,sizeof(gname));
+	H5Iget_name(groupID,gname,sizeof(gname));
+
+	type = xmlGetProp(groupNode,(xmlChar *)"type");
+	attID = H5LTget_attribute_string(groupID,gname,"NX_class",data);
+	if(attID < 0){
+		NXVsetLog(self,"sev","error");
+		NXVsetLog(self,"message","Required group attribute NX_class missing");
+		NXVlog(self);
+		self->errCount++;
+	} else {
+		if(strcmp(data,(char *)type) != 0){
+			NXVsetLog(self,"sev","error");
+			NXVprintLog(self,"message","Wrong group type, expected %s, got %s",
+			(char *)type, data);
+			NXVlog(self);
+			self->errCount++;
+		}
+	}
+	xmlFree(type);
+
+	/*
+		search attribute child nodes
+	*/
+	cur = groupNode->xmlChildrenNode;
+	while(cur != NULL){
+		if(xmlStrcmp(cur->name, (xmlChar *)"attribute") == 0){
+			name = xmlGetProp(cur,(xmlChar *)"name");
+			if(!H5LTfind_attribute(groupID,name)){
+					NXVsetLog(self,"sev","error");
+					NXVprintLog(self,"message","Required group attribute %s missing",
+					name);
+					NXVlog(self);
+					self->errCount++;
+			} else {
+				/*
+					TODO validate attribute data.
+					As we do not use group attributes heavily, deferred for
+					now
+				*/
+			}
+			xmlFree(name);
+		}
+		cur = cur->next;
+	}
 }
 /*--------------------------------------------------------------*/
 static int isOptional(xmlNodePtr node)
@@ -131,9 +182,70 @@ static hid_t findGroup(pNXVcontext self, hid_t parentGroup, xmlNodePtr groupNode
 	return -1;
 }
 /*--------------------------------------------------------------*/
-static void validateLink(pNXVcontext self, xmlChar* target)
+static void validateLink(pNXVcontext self, hid_t groupID,
+		xmlChar *name, xmlChar *target)
 {
-	/* TODO */
+	hid_t objID;
+	herr_t att;
+	char linkTarget[512], dataPath[512];
+
+	if(H5LTpath_valid(groupID,(char *)name, 1)){
+		/*
+		  The positive test means that the link exists and is pointing to
+			a valid HDF5 object. This is alread good.
+		*/
+		objID = H5Oopen(groupID,(char *)name,H5P_DEFAULT);
+		assert(objID >= 0); /* we just tested for existence, didn't we? */
+		memset(linkTarget,0,sizeof(linkTarget));
+		att = H5LTget_attribute_string(groupID,name,"target",linkTarget);
+		if(att < 0){
+				NXVsetLog(self,"sev","error");
+				H5Iget_name(objID,dataPath,sizeof(dataPath));
+				NXVsetLog(self,"dataPath",dataPath);
+				NXVsetLog(self,"message","Link is missing required attribute target");
+				NXVlog(self);
+				self->errCount++;
+		} else {
+			/*
+				test that the target attribute really points to something
+				real. It could be that the link was done right but the
+				target attribute set sloppily.
+			*/
+			if(!H5LTpath_valid(self->fileID,linkTarget,1)){
+				NXVsetLog(self,"sev","error");
+				H5Iget_name(objID,dataPath,sizeof(dataPath));
+				NXVsetLog(self,"dataPath",dataPath);
+				NXVprintLog(self,"message","Link target %s is invalid",
+					linkTarget);
+				NXVlog(self);
+				self->errCount++;
+			} else {
+			/*
+			  TODO check that the link actually points to where the
+				application definition requires it to point. This is rather
+				tricky for a number of reasons:
+				- In the application definition we have a path defined by group
+				  types, in linkTarget by actual names
+				- The starting point is unclear: we may start at root, but also
+				  at a sub entry.
+
+				I could implement this by working myself backwards from the
+				linkTarget and checking that all the groups down the path have
+				the right class.
+
+			*/
+			}
+		}
+		H5Oclose(objID);
+	} else {
+		NXVsetLog(self,"sev","error");
+		NXVprintLog(self,"message",
+			"Required link %s missing or not pointing to an HDF5 object",
+			(char *)name);
+		NXVlog(self);
+		self->errCount++;
+	}
+
 }
 /*--------------------------------------------------------------*/
 static void validateDependsOn(pNXVcontext self, hid_t groupID,
@@ -159,6 +271,7 @@ int NXVvalidateGroup(pNXVcontext self, hid_t groupID,
 		hash_table namesSeen;
 		xmlNodePtr cur = NULL;
 		xmlChar *name = NULL;
+		xmlChar *target = NULL;
 		hid_t childID;
 		char fName[256], childName[512], nxdlChildPath[512], childPath[512];
 		char mynxdlPath[512];
@@ -259,9 +372,11 @@ int NXVvalidateGroup(pNXVcontext self, hid_t groupID,
 			}
 			if(xmlStrcmp(cur->name,(xmlChar *) "link") == 0){
 				name = xmlGetProp(cur,(xmlChar *)"name");
+				target = xmlGetProp(cur,(xmlChar *)"target");
 				hash_insert((char *)name,strdup(""),&namesSeen);
-				name = xmlGetProp(cur,(xmlChar *)"target");
-				validateLink(self,name);
+				validateLink(self,groupID,name, target);
+				xmlFree(name);
+				xmlFree(target);
 			}
 			cur = cur->next;
 		}

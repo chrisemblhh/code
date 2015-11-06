@@ -16,11 +16,61 @@
 #include <assert.h>
 #include "nxvcontext.h"
 
+int testISO8601(char *date)
+{
+	int y,m,d,h,min;
+	int count;
+
+	/*
+		we accept the official format with the T between data and time
+		and the unofficial common use where the T is replaced by a space
+	*/
+	count = sscanf(date,"%d-%d-%dT%d:%d", &y,&m,&d,&h,&min);
+	if(count != 5){
+		count = sscanf(date,"%d-%d-%d %d:%d", &y,&m,&d,&h,&min);
+		if(count == 5){
+			return 1;
+		} else {
+			return 0;
+		}
+	} else {
+		return 1;
+	}
+}
+/*----------------------------------------------------------------------*/
 static int validateFileAttributes(pNXVcontext self, hid_t fileID)
 {
-	/*
-	  TODO
-	*/
+	herr_t attID;
+	char data[1024];
+
+	NXVsetLog(self,"sev","debug");
+	NXVsetLog(self,"message","Validating file attributes");
+	NXVlog(self);
+
+	NXVsetLog(self,"dataPath","/");
+	attID = H5LTget_attribute_string(fileID,"/","file_name",data);
+	if(attID < 0){
+		NXVsetLog(self,"sev","error");
+		NXVsetLog(self,"message","Missing required global file_name attribute");
+		NXVlog(self);
+		self->errCount++;
+	}
+
+	attID = H5LTget_attribute_string(fileID,"/","file_time",data);
+	if(attID < 0){
+		NXVsetLog(self,"sev","error");
+		NXVsetLog(self,"message","Missing required global file_time attribute");
+		NXVlog(self);
+		self->errCount++;
+	} else {
+			if(!testISO8601(data)){
+				NXVsetLog(self,"sev","error");
+				NXVsetLog(self,"message","file_time is not in ISO 8601 format");
+				NXVlog(self);
+				self->errCount++;
+			}
+	}
+
 	return 0;
 }
 /*--------------------------------------------------------------*/

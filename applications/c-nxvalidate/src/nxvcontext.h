@@ -61,3 +61,8 @@ int NXVvalidateGroup(pNXVcontext self, hid_t groupID,
  */
  int NXVvalidateField(pNXVcontext self, hid_t fieldID,
  	xmlNodePtr groupNode);
+
+/*
+ * implemented in nxvmainloop.c
+ */
+int testISO8601(char *date);
