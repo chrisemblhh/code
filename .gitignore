@@ -1,1 +1,5 @@
 *.swp
+*.dylib
+*.cmake
+CMakeFiles/
+
