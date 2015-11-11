@@ -7,6 +7,8 @@
 	*/
 #include "nxvcontext.h"
 #include <hdf5.h>
+#include <hdf5_hl.h>
+#include <string.h>
 #include <libxml/tree.h>
 
 static void validateData(pNXVcontext self, hid_t fieldID,
@@ -24,45 +26,203 @@ static void validateDimensions(pNXVcontext self, hid_t fieldID,
 static void validateUnits(pNXVcontext self, hid_t fieldID,
 	xmlChar *type)
 {
-	/* TODO */
+	if(!H5LTfind_attribute(fieldID,"units")){
+			NXVsetLog(self,"sev","error");
+			NXVsetLog(self,"message","Required units attribute missing");
+			NXVlog(self);
+			self->errCount++;
+	}
+	/*
+	  more cannot be done: the NXDL units are symbols and as NeXus allows
+		all UDunits unit strings, it is an impossible task to verify this.
+	*/
 }
 /*--------------------------------------------------------------*/
 static void validateType(pNXVcontext self, hid_t fieldID,
 	xmlChar *type)
 {
-	/* TODO */
+	hid_t h5type;
+	H5T_class_t h5class;
+	char h5dataType[132], dataName[512], data[512];
+	size_t len;
+
+	h5type = H5Dget_type(fieldID);
+	h5class = H5Tget_class(h5type);
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_FLOAT") == 0 && h5class != H5T_FLOAT){
+		NXVsetLog(self,"sev","error");
+		len = sizeof(h5dataType);
+		memset(h5dataType,0,len*sizeof(char));
+		H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+		NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+			(char* )type, h5dataType);
+		NXVlog(self);
+		self->errCount++;
+	}
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_POSINT") == 0 && h5class != H5T_INTEGER){
+		NXVsetLog(self,"sev","error");
+		len = sizeof(h5dataType);
+		memset(h5dataType,0,len*sizeof(char));
+		H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+		NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+			(char* )type, h5dataType);
+		NXVlog(self);
+		self->errCount++;
+		/*
+			TODO: there could be more testing here. But this would involve reading
+			all the data and testing it for positivity. It is to be dicussed if we
+			retract POSINT and replace it with UINT
+		*/
+	}
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_INT") == 0 && h5class != H5T_INTEGER){
+		NXVsetLog(self,"sev","error");
+		len = sizeof(h5dataType);
+		memset(h5dataType,0,len*sizeof(char));
+		H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+		NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+			(char* )type, h5dataType);
+		NXVlog(self);
+		self->errCount++;
+	}
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_BOOLEAN") == 0 && h5class != H5T_INTEGER){
+		NXVsetLog(self,"sev","error");
+		len = sizeof(h5dataType);
+		memset(h5dataType,0,len*sizeof(char));
+		H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+		NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+			(char* )type, h5dataType);
+		NXVlog(self);
+		self->errCount++;
+		/*
+			TODO: more testing could be done here: read the data and test if it
+			is 0 or 1
+		*/
+	}
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_UINT") == 0
+		&& h5class != H5T_INTEGER && H5Tget_sign(h5type) != H5T_SGN_NONE){
+		NXVsetLog(self,"sev","error");
+		len = sizeof(h5dataType);
+		memset(h5dataType,0,len*sizeof(char));
+		H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+		NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+			(char* )type, h5dataType);
+		NXVlog(self);
+		self->errCount++;
+	}
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_CHAR") == 0 && h5class != H5T_STRING){
+		NXVsetLog(self,"sev","error");
+		len = sizeof(h5dataType);
+		memset(h5dataType,0,len*sizeof(char));
+		H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+		NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+			(char* )type, h5dataType);
+		NXVlog(self);
+		self->errCount++;
+	}
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_NUMBER") == 0 &&
+		h5class != H5T_INTEGER && h5class != H5T_FLOAT){
+		NXVsetLog(self,"sev","error");
+		len = sizeof(h5dataType);
+		memset(h5dataType,0,len*sizeof(char));
+		H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+		NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+			(char* )type, h5dataType);
+		NXVlog(self);
+		self->errCount++;
+	}
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_DATE_TIME") == 0){
+		if(h5class != H5T_STRING){
+			NXVsetLog(self,"sev","error");
+			len = sizeof(h5dataType);
+			memset(h5dataType,0,len*sizeof(char));
+			H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+			NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+				(char* )type, h5dataType);
+				NXVlog(self);
+				self->errCount++;
+			} else {
+				memset(dataName,0,sizeof(dataName));
+				H5Iget_name(fieldID,dataName,sizeof(dataName));
+				memset(data,0,sizeof(data));
+				H5LTread_dataset_string(self->fileID,dataName,data);
+				if(!testISO8601(data)){
+					NXVsetLog(self,"sev","error");
+					NXVsetLog(self,"message","Date/Time not in ISO8601 format");
+					NXVlog(self);
+					self->errCount++;
+				}
+			}
+	}
+
+	if(xmlStrcmp(type,(xmlChar *)"NX_BINARY") == 0
+		&& h5class != H5T_INTEGER && H5Tget_size(h5type) != 1){
+		NXVsetLog(self,"sev","error");
+		len = sizeof(h5dataType);
+		memset(h5dataType,0,len*sizeof(char));
+		H5LTdtype_to_text(h5type,h5dataType,H5LT_DDL,&len);
+		NXVprintLog(self,"message","Data type mismatch, expected %s, got %s",
+			(char* )type, h5dataType);
+		NXVlog(self);
+		self->errCount++;
+	}
+
+	H5Tclose(h5type);
+
 }
+/*--------------------------------------------------------------
+ For attribute validation we use a little dictionary which maps
+ attribute names to attribute data validation functions. We use
+ this to process both direct field element XML attributes and
+ attributes given as children of the field node. The dictionary
+ is initialized below, after the validation functions.
+ --------------------------------------------------------------*/
+typedef int (*AttributeDataValidator)(pNXVcontext self,
+	hid_t fieldID, char *testValue);
+
+typedef struct {
+	char *name;
+	AttributeDataValidator dataValidator;
+}AttributeValidationData;
+
 /*--------------------------------------------------------------*/
-static void validateSignal(pNXVcontext self, hid_t fieldID,
-	xmlChar *type)
+static int SignalValidator(pNXVcontext self, hid_t fieldID,
+	char *testValue)
 {
-	/* TODO */
+	return 1;
 }
+/*----------------------------------------------------------------*/
+static AttributeValidationData attValData[] = {
+	{"signal",SignalValidator},
+	{"axis",SignalValidator},
+	NULL};
 /*--------------------------------------------------------------*/
-static void validateAxes(pNXVcontext self, hid_t fieldID,
-	xmlChar *data)
-{
-	/* TODO */
-}
-/*--------------------------------------------------------------*/
-static void validateAxis(pNXVcontext self, hid_t fieldID,
-	xmlChar *data)
-{
-	/* TODO */
-}
-/*--------------------------------------------------------------*/
-static void validatePrimary(pNXVcontext self, hid_t fieldID,
-	xmlChar *data)
-{
-	/* TODO */
+static int findAttValidator(char *name){
+	int i;
+	for(i=0;attValData[i].name != NULL;i++){
+		if(strcmp(attValData[i].name,name) == 0){
+			return i;
+		}
+	}
+	return -1;
 }
 /*--------------------------------------------------------------*/
 static void validateAttributes(pNXVcontext self, hid_t fieldID,
 	xmlNodePtr fieldNode)
 {
 	xmlChar *data = NULL, *name = NULL;
-	xmlNodePtr cur;
+	xmlNodePtr cur, attData, item;
+	int status, attOK = 0, i;
 
+	/*
+		Type and units attributes are special...
+	*/
 	data = xmlGetProp(fieldNode,(xmlChar *)"type");
 	if(data != NULL){
 		validateType(self,fieldID,data);
@@ -73,30 +233,81 @@ static void validateAttributes(pNXVcontext self, hid_t fieldID,
 		validateUnits(self,fieldID,data);
 	}
 
-	data = xmlGetProp(fieldNode,(xmlChar *)"signal");
-	if(data != NULL){
-		validateSignal(self,fieldID,data);
-	}
-	data = xmlGetProp(fieldNode,(xmlChar *)"axes");
-	if(data != NULL){
-		validateAxes(self,fieldID,data);
+	/*
+		test and process other attributes...
+	*/
+	for(i = 0; attValData[i].name != NULL; i++){
+			data = xmlGetProp(fieldNode,(xmlChar *) attValData[i].name);
+			if(data != NULL){
+					if(!H5LTfind_attribute(fieldID, attValData[i].name)){
+						NXVsetLog(self,"sev","error");
+						NXVprintLog(self,"message","Required attribute %s missing",
+							attValData[i].name);
+						NXVlog(self);
+						self->errCount++;
+					} else {
+						status = attValData[i].dataValidator(self,fieldID, data);
+						if(status != 1){
+							NXVsetLog(self,"sev","error");
+							NXVprintLog(self,"message",
+								"Invalid value for attribute %s, should be %s",
+								attValData[i].name,(char *)data);
+							NXVlog(self);
+							self->errCount++;
+						}
+					}
+			}
 	}
 
-	data = xmlGetProp(fieldNode,(xmlChar *)"axis");
-	if(data != NULL){
-		validateAxis(self,fieldID,data);
-	}
-
-	data = xmlGetProp(fieldNode,(xmlChar *)"primary");
-	if(data != NULL){
-		validatePrimary(self,fieldID,data);
-	}
-
+	/*
+		validate attributes in attribute elements
+	*/
 	cur = fieldNode->xmlChildrenNode;
 	while(cur != NULL){
 		if(xmlStrcmp(cur->name,(xmlChar *)"attribute") == 0){
 			name = xmlGetProp(cur,(xmlChar *)"name");
-			/* TODO */
+			if(!H5LTfind_attribute(fieldID,(char*)name)){
+				NXVsetLog(self,"sev","error");
+				NXVprintLog(self,"message","Required attribute %s missing",
+					(char *)name);
+				NXVlog(self);
+				self->errCount++;
+			} else {
+				/*
+					find enumeration node
+				*/
+				attData = cur->xmlChildrenNode;
+				while(attData != NULL){
+					if(xmlStrcmp(attData->name,(xmlChar *)"enumeration") == 0){
+							/*
+								find the item nodes
+							*/
+							attOK = 0;
+							item = attData->xmlChildrenNode;
+							i = findAttValidator((char *)name);
+							while(item != NULL){
+								data = xmlGetProp(item,(xmlChar *)"value");
+									if(data != NULL && i >= 0){
+										status = attValData[i].dataValidator(self,fieldID,data);
+										if(status == 1){
+											attOK = 1;
+											break;
+										}
+									}
+									item = item->next;
+							}
+							if(attOK == 0){
+									NXVsetLog(self,"sev","error");
+									NXVprintLog(self,"message",
+										"Invalid value for attribute %s",
+										attValData[i].name);
+										NXVlog(self);
+										self->errCount++;
+									}
+						}
+					attData = attData->next;
+				}
+			}
 		}
 		cur = cur->next;
 	}
