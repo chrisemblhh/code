@@ -52,3 +52,8 @@ endif()
 #    add_subdirectory (python)
 #endif (PYTHONINTERP_FOUND)
 #add_subdirectory (swig)
+
+
+if(ENABLE_FORTRAN2003)
+    add_subdirectory (f03)
+endif()
