@@ -977,7 +977,9 @@ NXstatus  NXXgetinfo64 (NXhandle fid, int *rank,
       dimension[0]= strlen(userData->value.opaque);
     } else {
       *iType = translateTypeCode(attr, "");
-      analyzeDim(attr,rank,dimension,iType);
+      if (analyzeDim(attr,rank,dimension,iType) != NX_OK){
+        return NX_ERROR;
+      }
       if (dimension[0] == -1) /* 1D strings are NX_CHAR not NX_CHAR[] so length will not be correct */
       {
         dimension[0] = strlen(userData->value.opaque);

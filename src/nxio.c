@@ -241,7 +241,7 @@ extern char *stptok(char *s, char *tok, size_t toklen, char *brk);
  * if passed NX_CHAR, then returns dimension of -1 and the caller
  * needs to do a strlen() or equivalent 
  */
-void analyzeDim(const char *typeString, int *rank, 
+int analyzeDim(const char *typeString, int *rank, 
 			    int64_t *iDim, int *type){
   char dimString[132];
   char dim[20];
@@ -269,7 +269,7 @@ void analyzeDim(const char *typeString, int *rank,
       break;
     default:
       mxml_error("ERROR: (analyzeDim) unknown type code %d for typeString %s", *type, typeString);
-      break;
+      return NX_ERROR;
     }
   } else {
     /*
@@ -278,13 +278,13 @@ void analyzeDim(const char *typeString, int *rank,
     */
     dimStart = strchr(typeString,(int)'[') + 1;
     dimEnd =  strchr(typeString,(int)']');
-    if(!dimStart || !dimEnd) {
+    if(!dimStart || !dimEnd || dimStart >= dimEnd) {
       mxml_error("ERROR: malformed dimension string in %s",typeString);
-      return;
+      return NX_ERROR;
     }
     if((dimEnd - dimStart) > 131){
       mxml_error("ERROR: run away dimension definition in %s",typeString);
-      return;
+      return NX_ERROR;
     }
     memset(dimString,0,132);
     memcpy(dimString,dimStart,(dimEnd-dimStart)*sizeof(char));
@@ -297,6 +297,7 @@ void analyzeDim(const char *typeString, int *rank,
     }
     *rank = myRank;
   }
+  return NX_OK;
 }
 /*--------------------------------------------------------------------*/
 int translateTypeCode(const char *code, const char* term){
@@ -332,13 +333,13 @@ static mxml_node_t* findDimsNode(mxml_node_t *node)
 }
 
 /*---------------------------------------------------------------------*/
-/*return 1 if in table mode , 0 if not */
-static void analyzeDataType(mxml_node_t *parent, int *rank, int *type,
+static int analyzeDataType(mxml_node_t *parent, int *rank, int *type,
 			    int64_t *iDim){
   const char *typeString;
   mxml_node_t* tnode;
   int nx_type = -1;
   int table_mode = 0;
+  int res;
 
   *rank = 1;
   *type = NX_CHAR;
@@ -355,7 +356,7 @@ static void analyzeDataType(mxml_node_t *parent, int *rank, int *type,
   }
   typeString = mxmlElementGetAttr(parent,TYPENAME);
   if(typeString == NULL){
-    return;
+    return NX_ERROR;
   }
 
   nx_type = translateTypeCode((char *)typeString, "");
@@ -368,18 +369,22 @@ static void analyzeDataType(mxml_node_t *parent, int *rank, int *type,
      "ERROR: %s is an invalid NeXus type, I try to continue but may fail",
      typeString);
     *type =NX_CHAR;
-    return;
+    return NX_ERROR;
   }
 
   *type = nx_type;
-  
-  analyzeDim(typeString, rank, iDim, type);
+
+  res = analyzeDim(typeString, rank, iDim, type);
+  if (res != NX_OK){
+    return res;
+  }
+
   if (table_mode)
   {
 	*rank = 1;
 	iDim[0] = 1;
   }
-  return;
+  return NX_OK;
 }
 /*-------------------------------------------------------------------*/
 void destroyDataset(void *data){
@@ -445,6 +450,8 @@ mxml_type_t nexusTypeCallback(mxml_node_t *parent){
   }
 }
 /*----------------------------------------------------------------------*/
+/* mxml callback - return 0 for success, 1 for failure
+ *                 rather than NX_OK and NX_ERROR */
 int nexusLoadCallback(mxml_node_t *node, const char *buffer){
   mxml_node_t *parent = NULL;
   int rank, type; 
@@ -454,7 +461,9 @@ int nexusLoadCallback(mxml_node_t *node, const char *buffer){
   pNXDS dataset = NULL;
 
   parent = node->parent;
-  analyzeDataType(parent,&rank,&type,iDim);
+  if (analyzeDataType(parent,&rank,&type,iDim) != NX_OK){
+    return 1;
+  }
   if(iDim[0] == -1 || !strcmp(parent->parent->value.element.name, DIMS_NODE_NAME)){
     iDim[0] = strlen(buffer);
     node->value.custom.data = strdup(buffer);
