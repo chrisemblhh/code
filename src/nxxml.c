@@ -90,6 +90,9 @@ typedef struct {
   char filename[1024];         /* file name, for NXflush, NXclose */
   xmlStack stack[NXMAXSTACK];  /* stack */
 }XMLNexus, *pXMLNexus;
+
+static mxml_node_t *findData(mxml_node_t *node);
+
 /*===================== support functions ===============================*/
 extern char *stptok(char *s, char *tok, size_t toklen, char *brk);
 /*----------------------------------------------------------------------*/
@@ -717,6 +720,81 @@ NXstatus  NXXopendata (NXhandle fid, CONSTCHAR *name){
   xmlHandle->stack[xmlHandle->stackPointer].currentChild = NULL;
   xmlHandle->stack[xmlHandle->stackPointer].currentAttribute = 0;
   xmlHandle->stack[xmlHandle->stackPointer].options = 0;
+
+#ifndef NDEBUG
+  /* Check that the size returned by getNXDatasetLength is
+   * the same as the size calculated from NXXgetinfo64 */
+  {
+    int      rank, i;
+    int64_t  dims[NX_MAXRANK];
+    int      nxdatatype;
+    pXMLNexus xmlHandle;
+    mxml_node_t *userData, *current;
+    pNXDS dataset;
+    int getinfo_len, dataset_len;
+    int getinfo_size, dataset_size;
+
+    xmlHandle = (pXMLNexus)fid;
+    assert(xmlHandle);
+
+    current = xmlHandle->stack[xmlHandle->stackPointer].current;
+
+    userData = findData(current);
+    assert(userData);
+    dataset = (pNXDS)userData->value.custom.data;
+
+    assert(NXXgetinfo64(fid, &rank, dims, &nxdatatype) == NX_OK);
+
+    getinfo_len = 1;
+    for(i=0; i<rank; ++i){
+      getinfo_len *= dims[i];
+    }
+
+    dataset_len = getNXDatasetLength(dataset);
+
+    if (getinfo_len != dataset_len){
+      fprintf(stderr, "inconsistent lengths for dataset '%s'\n", name);
+      fprintf(stderr, "getinfo_len is %d\n", getinfo_len);
+      fprintf(stderr, "dataset_len is %d\n", dataset_len);
+    }
+    //assert(getinfo_len == dataset_len);
+
+    switch(nxdatatype) {
+      case NX_CHAR:
+      case NX_INT8:
+      case NX_UINT8:
+        getinfo_size = getinfo_len;
+        break;
+      case NX_INT16:
+      case NX_UINT16:
+        getinfo_size = getinfo_len * 2;
+        break;
+      case NX_INT32:
+      case NX_UINT32:
+      case NX_FLOAT32:
+        getinfo_size = getinfo_len * 4;
+        break;
+      case NX_INT64:
+      case NX_UINT64:
+      case NX_FLOAT64:
+        getinfo_size = getinfo_len * 8;
+        break;
+      default:
+        fprintf(stderr, "Unknown data type (%d) in dataset '%s'", nxdatatype, name);
+        getinfo_size = 0;
+        break;
+    }
+
+    dataset_size = getNXDatasetByteLength(dataset);
+
+    if (getinfo_size != dataset_size){
+      fprintf(stderr, "inconsistent sizes for dataset '%s'\n", name);
+      fprintf(stderr, "getinfo_size is %d\n", getinfo_size);
+      fprintf(stderr, "dataset_size is %d\n", dataset_size);
+    }
+    //assert(getinfo_size == dataset_size);
+  }
+#endif
   return NX_OK;
 }
 /*----------------------------------------------------------------------*/
