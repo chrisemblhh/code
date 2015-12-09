@@ -118,7 +118,7 @@ int CNXTraverse::traverse( NXhandle handle, const char *grp_name  )
 {
 
     NXname name, nxclass;
-    int nxdataype;
+    int nxdatatype;
     int num_groups;
     std::string path;
 
@@ -131,7 +131,7 @@ int CNXTraverse::traverse( NXhandle handle, const char *grp_name  )
     for ( int i = 0; i < num_groups; i++ )
     {
 
-        if ( NXgetnextentry ( handle, name, nxclass, &nxdataype) == NX_ERROR ) 
+        if ( NXgetnextentry ( handle, name, nxclass, &nxdatatype) == NX_ERROR ) 
             return NX_ERROR;
 
         if (strcmp(nxclass,"SDS") == 0)
@@ -209,17 +209,17 @@ int CNXTraverse::show_dataset( NXhandle handle, const char* dset_name, const cha
 {
     int      rank;
     int      dims[NX_MAXRANK];
-    int      nxdataype;
+    int      nxdatatype;
     void     *buf=NULL;
     uint64_t nelmts;
 
     if ( NXopendata ( handle, dset_name) != NX_OK) 
         goto out;
 
-    if ( NXgetinfo ( handle, &rank, dims, &nxdataype) != NX_OK) 
+    if ( NXgetinfo ( handle, &rank, dims, &nxdatatype) != NX_OK) 
         goto out;
 
-    if ( NXmalloc( &buf, rank, dims, nxdataype) != NX_OK)
+    if ( NXmalloc( &buf, rank, dims, nxdatatype) != NX_OK)
         goto out;
 
     if ( NXgetdata( handle, buf) != NX_OK)
@@ -233,7 +233,7 @@ int CNXTraverse::show_dataset( NXhandle handle, const char* dset_name, const cha
     }
 
     //print
-    if ( print_data( nxdataype, nelmts, buf ) != NX_OK )
+    if ( print_data( nxdatatype, nelmts, buf ) != NX_OK )
         goto out;
 
     if ( options.read_attr )
@@ -285,7 +285,7 @@ out:
 int CNXTraverse::read_attr( NXhandle handle, const char* dset_name, const char* path )
 {
     char attr_name[128];
-    int  nxdataype;
+    int  nxdatatype;
     int  num_attr;
     int  length;
     void *buf=NULL;
@@ -300,7 +300,7 @@ int CNXTraverse::read_attr( NXhandle handle, const char* dset_name, const char* 
 
     for ( int i = 0 ; i < num_attr ; i++ )
     {
-        if ( NXgetnextattr( handle, attr_name, &length, &nxdataype ) != NX_OK)
+        if ( NXgetnextattr( handle, attr_name, &length, &nxdatatype ) != NX_OK)
             goto out;
 
         //print the path in front of attribute name
@@ -309,15 +309,15 @@ int CNXTraverse::read_attr( NXhandle handle, const char* dset_name, const char* 
 
         //read attribute
 
-        if ( NXmalloc( &buf, 1, &length, nxdataype) != NX_OK)
+        if ( NXmalloc( &buf, 1, &length, nxdatatype) != NX_OK)
             goto out;
 
-        if ( NXgetattr( handle, attr_name, buf, &length, &nxdataype) != NX_OK)
+        if ( NXgetattr( handle, attr_name, buf, &length, &nxdatatype) != NX_OK)
             goto out;
 
         //print
 
-        if ( print_data( nxdataype, length, buf ) != NX_OK )
+        if ( print_data( nxdatatype, length, buf ) != NX_OK )
             goto out;
 
         if ( NXfree (&buf) != NX_OK) 
@@ -353,7 +353,7 @@ out:
  *-------------------------------------------------------------------------
  */
 
-int CNXTraverse::print_data( int nxdataype, uint64_t nelmts, void* buf )
+int CNXTraverse::print_data( int nxdatatype, uint64_t nelmts, void* buf )
 {
     unsigned char      *ucbuf = (unsigned char *)buf;
     char               *cbuf = (char *)buf;
@@ -387,7 +387,7 @@ int CNXTraverse::print_data( int nxdataype, uint64_t nelmts, void* buf )
 
 
 
-    switch ( nxdataype )
+    switch ( nxdatatype )
     {
     default:
         assert(0);
